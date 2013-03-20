@@ -41,15 +41,23 @@ function fraud_detect(){
 	}
 
 	### uncomment to log ony paid visits
-	if ($paid_visit == false){
-		return false; # exit if not paid visit
-	}
+	# if ($paid_visit == false){
+	# 	return false; # exit if not paid visit
+	# }
 
 	# ok, it's a paid visit, lets log it
 	$date 	= date('Y-m-d H:i:s',time());
 	$ip  		= $_SERVER['REMOTE_ADDR'];
 	$result = $wpdb->insert( $wpdb->fraud_log, array( 'date' => $date, 'ip' => $ip));
 
+
+	# set a cookie or session variable if cookies are disabled for "visited" for 2 minutes
+	if (!isset($_COOKIE['visited']))	{
+		if (!setcookie('visited',time(),time() + 120)) $_SESSION['visited'] = time() + 120;
+		}
+	# don't do anything if same user...
+	if ($_COOKIE['visited']) return;
+	if (isset($_SESSION['visited']) && $_SESSION['visited'] <= time()) return;
 
 	# now lets check if it's repeat visit
 
@@ -65,12 +73,12 @@ function fraud_detect(){
 		# yep, this ip was here before, lets send alert.
 		$site = strstr(home_url(),'https') ? substr(home_url(), 8) : substr(home_url(), 7);
 		# $site = str_replace('.', '_', $site);
-		$subject = __('Possible PPC fraud alert at: '.$site.' !');
+		$subject = __('Possible PPC fraud alert at: "'.$site.'" !');
 		$content = 
 		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
 		'<p>The following IP came from paid ad to site more then twice in the last '.$fraud_interval.' minutes:</p>'.
 		'<h3>'.$ip.'</h3>'.
-		'<p>This ip came from paid source to the site '.$count[0]->count.' for the last '.$ttl.' days.</p>'
+		'<p>This ip came from paid source to the site '.$count[0]->count.' for the last '.$fraud_ttl.' days.</p>'
 		;
 	
 		$headers = array();
@@ -84,6 +92,7 @@ function fraud_detect(){
 		}
 
 		add_filter('wp_mail_content_type', 'set_html_content_type');
+		# echo $emails[0];
 		wp_mail($emails[0], __($subject), $content , $headers);
 		remove_filter('wp_mail_content_type', 'set_html_content_type'); 
 		}
