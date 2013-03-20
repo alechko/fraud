@@ -28,9 +28,8 @@ function fraud_detect(){
 	global $wpdb;
 	$wpdb->fraud_log	= $wpdb->prefix . 'fraud_log';
 
-	# print_r($_SERVER);
-	# print_r($_COOKIE);
 	$paid_visit = false;
+
 	# try to check if user came from paid source
 	# first, by cookie
 	if (isset($_COOKIE['__utmz']) && strstr($_COOKIE['__utmz'], 'gclid')){
@@ -42,58 +41,92 @@ function fraud_detect(){
 	}
 
 	### uncomment to log ony paid visits
-	# if (!$paid_visit){
-	# 	return false; # exit if not paid visit
-	# }
+	if (!$paid_visit){
+		return false; # exit if not paid visit
+	}
 
 	# ok, it's a paid visit, lets log it
-	$date = $event['date'] = date('Y-m-d H:i:s',time());
-	$ip = $event['ip'] = $_SERVER['REMOTE_ADDR'];
-
-
+	$date 	= date('Y-m-d H:i:s',time());
+	$ip  		= $_SERVER['REMOTE_ADDR'];
 	$result = $wpdb->insert( $wpdb->fraud_log, array( 'date' => $date, 'ip' => $ip));
 
-	$fraud_interval = get_option('fraud_interval');
-	$history = date('Y-m-d H:i:s',strtotime("$interval -$fraud_interval minutes"));
-	$count = $wpdb->get_results("SELECT COUNT(*) AS count FROM $wpdb->fraud_log WHERE date>'$history' AND ip='$ip'");
-	if ($count[0]->count > 1) {
-		# fraud_alert($event);
-		echo "fr";
 
-		$site = strstr(get_bloginfo('siteurl'),'https') ? substr(get_bloginfo('siteurl'), 8) : substr(get_bloginfo('siteurl'), 7);
-		$content = 
-		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
-		'<p>The following IP visited the site more then twice in the last '.$fraud_interval.' minutes!</p>'
-		;
-
-		#TODO: get the list of emails from     $fraud_hash = json_decode( get_option('fraud_hash') );
-		# wp_mail( get_option( 'admin_email' ), "[ " . get_option( 'blogname' ) . " ] ".__( 'Delete My Site' ), $content );
-		$subject = __('possible at '.esc_attr($site).' ');
-		wp_mail( 'mail@alechko.net', __($subject), $content );
-		}
+	# now lets check if it's repeat visit
 
 	# remove old records
 	$fraud_ttl = get_option('fraud_ttl');
 	$ttl = date('Y-m-d H:i:s',strtotime("now -$fraud_ttl days"));
 	$wpdb->query("DELETE FROM $wpdb->fraud_log WHERE date<'$ttl'");
-/*
-	# for some reason, using add_action('init', 'fraud_detect'); calls this function multiple times
-	# using count query and matching the current time we're preventing same record beign written twice into DB
-	# it's important to use $date var to set the webserver date
-	# search for same event in radius of 5 seconds
-	$f = date('Y-m-d H:i:s',strtotime("$date -5 seconds"));
-	$u = date('Y-m-d H:i:s',strtotime("$date +5 seconds"));
-	# $count = $wpdb->get_results("SELECT COUNT(*) AS count FROM $wpdb->fraud_log WHERE date>'$f' AND date<'$u' AND ip='$ip'");
-	# if ($count[0]->count < 1){
-		# we've got no similar events logged, lets log this one
-		fraud_write_log($event);
-		# lets see if the ip is already logged within click interval
-		fraud_count($event);
-	# } 
-*/
+	
+	$fraud_interval = get_option('fraud_interval');
+	$history = date('Y-m-d H:i:s',strtotime("$interval -$fraud_interval minutes"));
+	$count = $wpdb->get_results("SELECT COUNT(*) AS count FROM $wpdb->fraud_log WHERE date>'$history' AND ip='$ip'");
+	if ($count[0]->count > 1) { 
+		# yep, this ip was here before, lets send alert.
+		$site = strstr(home_url(),'https') ? substr(home_url(), 8) : substr(home_url(), 7);
+		# $site = str_replace('.', '_', $site);
+		$subject = __('Possible PPC fraud alert at: '.$site.' !');
+		$content = 
+		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
+		'<p>The following IP came from paid ad to site more then twice in the last '.$fraud_interval.' minutes:</p>'.
+		'<h3>'.$ip.'</h3>'.
+		'<p>This ip came from paid source to the site '.$count[0]->count.' for the last '.$ttl.' days.</p>'
+		;
+	
+		$headers = array();
+		$emails = json_decode(get_option('fraud_hash'));
+		if (count($emails) > 1){
+			foreach ($emails as $key => $email) {
+				if ($key > 0){
+					$headers[] = 'Cc: <' .$email. '>';
+					}
+			  }
+		}
+
+		add_filter('wp_mail_content_type', 'set_html_content_type');
+		wp_mail($emails[0], __($subject), $content , $headers);
+		remove_filter('wp_mail_content_type', 'set_html_content_type'); 
+		}
+
+
 		return;
 }
 
+
+# change the FROM name
+add_filter( 'wp_mail_from_name', 'fraud_mail_from_name' );
+function fraud_mail_from_name( $name )
+{
+	$name = get_bloginfo('name');
+	if (strstr($name, ':')){
+		$regex_hash = json_decode(get_option('regex_replace_hash', $default = false));
+		if ($regex_hash){
+			if (array_key_exists($name, $regex_hash))
+				$name = $regex_hash->{$name};
+			}
+		}
+    return $name;
+}
+
+# change the FROM email
+add_filter( 'wp_mail_from', 'fraud_mail_from' );
+function fraud_mail_from( $email )
+{
+	$mail = get_bloginfo('admin_email');
+	if (strstr($mail, ':')){
+		$regex_hash = json_decode(get_option('regex_replace_hash', $default = false));
+		if ($regex_hash){
+			if (array_key_exists($mail, $regex_hash))
+				$mail = $regex_hash->{$mail};
+			}
+		}
+    return $mail;
+}
+
+function set_html_content_type()
+{
+	return 'text/html';
+}
 
 ### admin options
 function fraud_admin_menu() {
@@ -127,7 +160,7 @@ function fraud_admin_options(){
 	a.remove_email:link, a.remove_email:visited { display: inline-block; padding: 2px 3px 3px; line-height: 11px; font-size: 11px; background: #888; color: #fff; font-family: "Comic Sans MS"; font-weight: bold; -moz-border-radius: 3px; border-radius: 3px; text-decoration: none;  }
 	a.remove_email:hover { background: #BBB; }
 	-->
-	</style>j
+	</style>
 	<form method="post" action="">
 	  <h2>Fraud</h2>
 
@@ -229,6 +262,10 @@ function fraud_remove_db(){
 function fraud_deactivate(){
 	remove_action( 'send_headers', 'fraud_detect');
 	remove_action( 'admin_menu', 'fraud_admin_menu');
+	remove_action( 'wp', 'fraud_detect' );
+	delete_option( 'fraud_interval' ); 
+	delete_option( 'fraud_ttl' ); 
+	delete_option( 'fraud_hash' ); 	
 }
 
 ?>
