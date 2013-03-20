@@ -41,7 +41,7 @@ function fraud_detect(){
 	}
 
 	### uncomment to log ony paid visits
-	if (!$paid_visit){
+	if ($paid_visit == false){
 		return false; # exit if not paid visit
 	}
 
