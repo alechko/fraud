@@ -72,7 +72,7 @@ function fraud_detect(){
 	if ($count[0]->count > 1) { 
 		# yep, this ip was here before, lets send alert.
 		$site = strstr(home_url(),'https') ? substr(home_url(), 8) : substr(home_url(), 7);
-		# $site = str_replace('.', '_', $site);
+		$site = str_replace('.', ' ', $site);
 		$subject = __('Possible PPC fraud alert at: "'.$site.'" !');
 		$content = 
 		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
