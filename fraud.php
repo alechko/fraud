@@ -51,9 +51,13 @@ function fraud_detect(){
 	$result = $wpdb->insert( $wpdb->fraud_log, array( 'date' => $date, 'ip' => $ip));
 
 
-	# set a session variable for "visited"
-	if (!isset($_SESSION['visited'])) $_SESSION['visited'] = time();
-	if (isset($_SESSION['visited'])) return;
+	# set a cookie or session variable if cookies are disabled for "visited" for 2 minutes
+	if (!isset($_COOKIE['visited']))	{
+		if (!setcookie('visited',time(),time() + 120)) $_SESSION['visited'] = time() + 120;
+		}
+	# don't do anything if same user...
+	if ($_COOKIE['visited']) return;
+	if (isset($_SESSION['visited']) && $_SESSION['visited'] <= time()) return;
 
 	# now lets check if it's repeat visit
 
@@ -74,7 +78,7 @@ function fraud_detect(){
 		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
 		'<p>The following IP came from paid ad to site more then twice in the last '.$fraud_interval.' minutes:</p>'.
 		'<h3>'.$ip.'</h3>'.
-		'<p>This ip came from paid source to the site '.$count[0]->count.' times for the last '.$fraud_ttl.' days.</p>'
+		'<p>This ip came from paid source to the site '.$count[0]->count.' for the last '.$fraud_ttl.' days.</p>'
 		;
 	
 		$headers = array();
