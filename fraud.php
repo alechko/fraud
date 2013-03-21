@@ -41,23 +41,17 @@ function fraud_detect(){
 	}
 
 	### uncomment to log ony paid visits
-	# if ($paid_visit == false){
-	# 	return false; # exit if not paid visit
-	# }
+	if ($paid_visit == false){
+		return false; # exit if not paid visit
+	}
 
 	# ok, it's a paid visit, lets log it
 	$date 	= date('Y-m-d H:i:s',time());
 	$ip  		= $_SERVER['REMOTE_ADDR'];
 	$result = $wpdb->insert( $wpdb->fraud_log, array( 'date' => $date, 'ip' => $ip));
 
-
-	# set a cookie or session variable if cookies are disabled for "visited" for 2 minutes
-	if (!isset($_COOKIE['visited']))	{
-		if (!setcookie('visited',time(),time() + 120)) $_SESSION['visited'] = time() + 120;
-		}
-	# don't do anything if same user...
-	if ($_COOKIE['visited']) return;
-	if (isset($_SESSION['visited']) && $_SESSION['visited'] <= time()) return;
+	# lets check if the "visited" cookie already set, and skip non-unique visitor
+	if (isset($_COOKIE['visited'])) return;
 
 	# now lets check if it's repeat visit
 
@@ -97,8 +91,9 @@ function fraud_detect(){
 		remove_filter('wp_mail_content_type', 'set_html_content_type'); 
 		}
 
-
-		return;
+	# set a cookie for "visited" for 1 hour
+	setcookie('visited',time(),time() + 3600);
+	return;
 }
 
 
@@ -117,20 +112,20 @@ function fraud_mail_from_name( $name )
     return $name;
 }
 
-# change the FROM email
-add_filter( 'wp_mail_from', 'fraud_mail_from' );
-function fraud_mail_from( $email )
-{
-	$mail = get_bloginfo('admin_email');
-	if (strstr($mail, ':')){
-		$regex_hash = json_decode(get_option('regex_replace_hash', $default = false));
-		if ($regex_hash){
-			if (array_key_exists($mail, $regex_hash))
-				$mail = $regex_hash->{$mail};
-			}
-		}
-    return $mail;
-}
+# ### change the FROM email
+# add_filter( 'wp_mail_from', 'fraud_mail_from' );
+# function fraud_mail_from( $email )
+# {
+# 	$mail = get_bloginfo('admin_email');
+# 	if (strstr($mail, ':')){
+# 		$regex_hash = json_decode(get_option('regex_replace_hash', $default = false));
+# 		if ($regex_hash){
+# 			if (array_key_exists($mail, $regex_hash))
+# 				$mail = $regex_hash->{$mail};
+# 			}
+# 		}
+#     return $mail;
+# }
 
 function set_html_content_type()
 {
