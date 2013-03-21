@@ -45,13 +45,13 @@ function fraud_detect(){
 		return false; # exit if not paid visit
 	}
 
+	# lets check if the "visited" cookie already set, and skip non-unique visitor
+	if (isset($_COOKIE['visited'])) return;
+
 	# ok, it's a paid visit, lets log it
 	$date 	= date('Y-m-d H:i:s',time());
 	$ip  		= $_SERVER['REMOTE_ADDR'];
 	$result = $wpdb->insert( $wpdb->fraud_log, array( 'date' => $date, 'ip' => $ip));
-
-	# lets check if the "visited" cookie already set, and skip non-unique visitor
-	if (isset($_COOKIE['visited'])) return;
 
 	# now lets check if it's repeat visit
 
