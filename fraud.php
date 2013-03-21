@@ -67,12 +67,12 @@ function fraud_detect(){
 		# yep, this ip was here before, lets send alert.
 		$site = strstr(home_url(),'https') ? substr(home_url(), 8) : substr(home_url(), 7);
 		$site = str_replace('.', ' ', $site);
-		$subject = __('Possible PPC fraud alert at: "'.$site.'" !');
+		$subject = __('Multiple IP '.$ip.' entries from paid source at: "'.$site.'" !');
 		$content = 
 		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
 		'<p>The following IP came from paid ad to site more then twice in the last '.$fraud_interval.' minutes:</p>'.
 		'<h3>'.$ip.'</h3>'.
-		'<p>This ip came from paid source to the site '.$count[0]->count.' for the last '.$fraud_ttl.' days.</p>'
+		'<p>This ip came from paid source to the site '.$count[0]->count.' times for the last '.$fraud_ttl.' days.</p>'
 		;
 	
 		$headers = array();
@@ -112,20 +112,21 @@ function fraud_mail_from_name( $name )
     return $name;
 }
 
-# ### change the FROM email
-# add_filter( 'wp_mail_from', 'fraud_mail_from' );
-# function fraud_mail_from( $email )
-# {
-# 	$mail = get_bloginfo('admin_email');
-# 	if (strstr($mail, ':')){
-# 		$regex_hash = json_decode(get_option('regex_replace_hash', $default = false));
-# 		if ($regex_hash){
-# 			if (array_key_exists($mail, $regex_hash))
-# 				$mail = $regex_hash->{$mail};
-# 			}
-# 		}
-#     return $mail;
-# }
+### change the FROM email
+add_filter( 'wp_mail_from', 'fraud_mail_from' );
+function fraud_mail_from( $email )
+{
+	return 'ppc-fraud-alert@wordpress.site';
+	# $mail = get_bloginfo('admin_email');
+	# if (strstr($mail, ':')){
+	# 	$regex_hash = json_decode(get_option('regex_replace_hash', $default = false));
+	# 	if ($regex_hash){
+	# 		if (array_key_exists($mail, $regex_hash))
+	# 			$mail = $regex_hash->{$mail};
+	# 		}
+	# 	}
+ #    return $mail;
+}
 
 function set_html_content_type()
 {
