@@ -92,8 +92,8 @@ function fraud_detect(){
 		$subject = __('Multiple IP '.$ip.' entries from paid source at: "'.$site.'" !');
 		$rows = '';
 		foreach ($alert['reason'] as $reason) {
-			if ($reason == 'clicks') $rows .= '<p>The current IP clicked '.$clicks[0]->clicks.' times a paid ad in the last '.$fraud_interval.' minutes:</p>';
-			if ($reason == 'count') $rows .= '<p>For the last '.$fraud_ttl.' days this IP visited '.$count[0]->count.' distinct days</p>';
+			if ($reason == 'clicks') $rows .= '<p>This IP clicked '.$clicks[0]->clicks.' times a paid ad in the last '.$fraud_interval.' minutes.</p>';
+			if ($reason == 'count') $rows .= '<p>For the last '.$fraud_ttl.' days this IP visited '.$count[0]->count.' distinct days.</p>';
 		}
 		$content = 
 		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
