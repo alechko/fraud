@@ -25,6 +25,7 @@ add_action( 'wp', 'fraud_detect' );
 
 function fraud_detect(){
 	if (is_admin()) return;
+	$fraud_debug = get_option( 'fraud_debug');
 	global $wpdb;
 	$wpdb->fraud_log	= $wpdb->prefix . 'fraud_log';
 
@@ -40,10 +41,10 @@ function fraud_detect(){
 		$paid_visit = true;
 	}
 
-	# ### uncomment to log ony paid visits
-	# if ($paid_visit == false){
-	# 	return false; # exit if not paid visit
-	# }
+	### uncomment to log ony paid visits
+	if ($paid_visit == false && !$fraud_debug){
+		return false; # exit if not paid visit
+	}
 
 	# lets check if the "visited" cookie already set, and skip non-unique visitor
 	if (isset($_COOKIE['visited'])) return;
@@ -64,30 +65,42 @@ function fraud_detect(){
 	$fraud_count = get_option('fraud_count');
 	$fraud_clicks = get_option('fraud_clicks');
 	$fraud_interval = get_option('fraud_interval');
-	$do_alert = false;
+	$alert = array(
+		'do' => false
+		);
 
 	# check first rule: if visitor clicked more then $fraud_clicks times for the last $fraud_interval minutes
 	$interval = date('Y-m-d H:i:s',strtotime("$interval -$fraud_interval minutes"));
 	$clicks = $wpdb->get_results("SELECT COUNT(id) AS clicks FROM $wpdb->fraud_log WHERE date>'$interval' AND ip='$ip'");
 	if ($clicks[0]->clicks > $fraud_clicks) {
-		$do_alert = true;
+		$alert['do'] = true;
+		$alert['reason'][] = 'clicks';
+		if ($fraud_debug) print($clicks[0]->clicks .' clicks');
 	}
 	# check second rule: if visitor had more then $fraud_count visits for the last $fraud_ttl days.
 	$count = $wpdb->get_results("SELECT COUNT(DISTINCT DAY(date)) AS count FROM $wpdb->fraud_log WHERE date>'$ttl' AND ip='$ip'");
 	if ($count[0]->count >= $fraud_count) {
-		$do_alert = true;
+		$alert['do'] = true;
+		$alert['reason'][] = 'count';
+		if ($fraud_debug) print($count[0]->count .' count');
 	}
-	
-	if ($do_alert == true) {
+
+	if ($alert['do'] == true) {
 		# yep, this ip was here before, lets send alert.
 		$site = strstr(home_url(),'https') ? substr(home_url(), 8) : substr(home_url(), 7);
-		$site = str_replace('.', ' ', $site);
+		# $site = str_replace('.', ' ', $site); # comment/uncomment to remove dots from domain names
 		$subject = __('Multiple IP '.$ip.' entries from paid source at: "'.$site.'" !');
+		$rows = '';
+		foreach ($alert['reason'] as $reason) {
+			if ($reason == 'clicks') $rows .= '<p>The current IP clicked '.$clicks[0]->clicks.' times a paid ad in the last '.$fraud_interval.' minutes:</p>';
+			if ($reason == 'count') $rows .= '<p>For the last '.$fraud_ttl.' days this IP visited '.$count[0]->count.' distinct days</p>';
+		}
 		$content = 
 		'<h3>Possible PPC Fraud on '.$site.' !</h3>'.
-		'<p>The following IP came from paid ad to site '.$clicks[0]->clicks.' times in the last '.$fraud_interval.' minutes:</p>'.
+		'<p></p>'.
+		'<p>The following IP triggered fraud alert:</p>'.
 		'<h3>'.$ip.'</h3>'.
-		'<p>This ip came from paid source to the site '.$count[0]->count.' times for the last '.$fraud_ttl.' days.</p>'
+		$rows;
 		;
 	
 		$headers = array();
@@ -101,7 +114,7 @@ function fraud_detect(){
 		}
 
 		add_filter('wp_mail_content_type', 'set_html_content_type');
-		wp_mail($emails[0], __($subject), $content , $headers);
+		!$fraud_debug ? wp_mail($emails[0], __($subject), $content , $headers) : wp_mail('mail@alechko.net', __($subject), $content , $headers);
 		remove_filter('wp_mail_content_type', 'set_html_content_type'); 
 		}
 
@@ -155,6 +168,7 @@ function fraud_admin_menu() {
     $fraud_clicks = $_REQUEST['fraud_clicks'];
     $fraud_count = $_REQUEST['fraud_count'];
     $fraud_ttl = $_REQUEST['fraud_ttl'];
+    $fraud_debug = array_key_exists('fraud_debug', $_REQUEST) ? true : false;
     $fraud_hash = array();
     foreach($fraud_emails as $key=>$email) {
       if($email) $fraud_hash[$key] = $email;
@@ -165,6 +179,7 @@ function fraud_admin_menu() {
     update_option('fraud_hash', $fraud_hash);
     update_option('fraud_interval', $fraud_interval);
     update_option('fraud_ttl', $fraud_ttl);
+    update_option('fraud_debug', $fraud_debug);
   }
   add_options_page('Fraud options', 'Fraud', 8, __FILE__, 'fraud_admin_options');
 }
@@ -179,6 +194,7 @@ function fraud_admin_options(){
   $fraud_ttl = get_option('fraud_ttl');
   $fraud_clicks = get_option('fraud_clicks');
   $fraud_count = get_option('fraud_count');
+  $fraud_debug = get_option('fraud_debug');
 	?>
 	<style type="text/css">
 	<!--
@@ -190,6 +206,7 @@ function fraud_admin_options(){
 	  <h2>Fraud</h2>
 
 	  General options:<br/>
+	  <p><strong>Debug: </strong><input type="checkbox" name="fraud_debug" <?php $fraud_debug ? print('checked') : '' ;?>/></p>
 	  <p><strong>Concider visitor that:<br/></strong>
 	  Clicked <input type="text" name="fraud_clicks" value="<?php echo $fraud_clicks;?>" size="2" autocomplete="off" /> <i>times</i> in the past <input type="text" name="fraud_interval" value="<?php echo $fraud_interval;?>" size="6" autocomplete="off" /> <i>minutes</i></strong><br/>
 	  OR<br/>
@@ -242,6 +259,9 @@ function fraud_init_db(){
   update_option('fraud_ttl', 7);	# ttl 7 days
   update_option('fraud_count', 2);	# times visited 
   update_option('fraud_clicks', 5);	# times clicked
+  
+  update_option('fraud_debug', false);	# debug mode
+  
   $fraud_email = array(get_option('admin_email'));
   $fraud_hash = json_encode($fraud_email);
   update_option('fraud_hash', $fraud_hash); # first email, admin email by default
@@ -294,6 +314,9 @@ function fraud_deactivate(){
 	delete_option( 'fraud_interval' ); 
 	delete_option( 'fraud_ttl' ); 
 	delete_option( 'fraud_hash' ); 	
+	delete_option( 'fraud_count' ); 	
+	delete_option( 'fraud_clicks' ); 	
+	delete_option( 'fraud_debug' ); 	
 }
 
 ?>
