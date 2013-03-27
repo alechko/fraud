@@ -12,7 +12,7 @@ register_activation_hook( __FILE__, 'fraud_init_db' );
 
 # remove database
 register_deactivation_hook( __FILE__, 'fraud_deactivate' );
-register_deactivation_hook( __FILE__, 'fraud_remove_db' ); # comment/uncomment to drop db on plugin deactivation
+#register_deactivation_hook( __FILE__, 'fraud_remove_db' ); # comment/uncomment to drop db on plugin deactivation
 register_uninstall_hook( __FILE__, 'fraud_remove_db' );
 
 # add admin menu
@@ -159,6 +159,16 @@ function set_html_content_type()
 {
 	return 'text/html';
 }
+
+### Add settings link on plugin page
+function fraud_settings_link($links) { 
+  $settings_link = '<a href="options-general.php?page=fraud/fraud.php">Settings</a>'; 
+  array_unshift($links, $settings_link); 
+  return $links; 
+}
+ 
+$plugin = plugin_basename(__FILE__); 
+add_filter("plugin_action_links_$plugin", 'fraud_settings_link' );
 
 ### admin options
 function fraud_admin_menu() {
